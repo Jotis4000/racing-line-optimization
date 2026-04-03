@@ -1,51 +1,27 @@
-function track = genTrack()
+function track = genTrack(plt)
 
     %% Parameters
     addpath("tracks\")
 
-    FileName = "Spa.csv";
-    datat = xlsread(FileName)*10; % x_m, y_m, w_right, w_left
+    FileName = "Budapest.csv";
+    datat = xlsread(FileName); % x_m, y_m, w_right, w_left
 
-    track.m = [datat(:,1) datat(:,2)] % X, Y
-    track.w = [datat(:,4) datat(:,3)] % Left, Right
-
-    track.l = zeros(length(track.m(:,1)),2)
-    track.r = zeros(length(track.m(:,1)),2)
+    track.m = [datat(:,1) datat(:,2)]; % X, Y
+    track.w = [datat(:,4) datat(:,3)]; % Left, Right
 
     % Generate track bounds - iterate through data set, find direction,
     % add point perpendicular
 
-    for i = 1:length(track.m(:,1))
+    track.vec = [circshift(track.m(:,1), [-1 0])-track.m(:,1) circshift(track.m(:,2), [-1 0])-track.m(:,2)];
+    track.vecmag = vecnorm(track.vec,2,2);
+    track.l = track.m+[-track.vec(:,2), track.vec(:,1)]./track.vecmag.*track.w(:,1);
+    track.r = track.m+[track.vec(:,2), -track.vec(:,1)]./track.vecmag.*track.w(:,2);
 
-        if i==length(track.m(:,1))
-            vec = [track.m(1,1)-track.m(i,1) track.m(1,2)-track.m(i,2)]
-        else
-            vec = [track.m(i+1,1)-track.m(i,1) track.m(i+1,2)-track.m(i,2)]
-        end
-
-        mag = norm(vec)
-        Rright = [0 -1; 1 0] % I thought these were backwards? lol?
-        Rleft = [0 1; -1 0]
-
-        vecleft = vec*Rleft/mag
-        vecright = vec*Rright/mag
-
-        % disp(vecleft)
-
-        track.l(i,1) = track.m(i,1)+vecleft(1)*track.w(i,1)
-        track.l(i,2) = track.m(i,2)+vecleft(2)*track.w(i,1)
-
-        track.r(i,1) = track.m(i,1)+vecright(1)*track.w(i,2)
-        track.r(i,2) = track.m(i,2)+vecright(2)*track.w(i,2)
-
-        % disp(mag)
-        % phi = 
-
+    if plt
+        plot(track.m(:,1),track.m(:,2),track.l(:,1),track.l(:,2),track.r(:,1),track.r(:,2))
+        legend("m","l","r")
     end
 
-    % plot(track.x_m,track.y_m,track.x_l,track.y_l,track.x_r,track.y_r)
-    plot(track.m(:,1),track.m(:,2),track.l(:,1),track.l(:,2),track.r(:,1),track.r(:,2))
-    legend("m","l","r")
-    % disp(datat(:,1))
+    track.mu = 1.4; % Ground friction coefficient
 
 end
