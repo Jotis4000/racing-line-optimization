@@ -1,0 +1,51 @@
+function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, car)
+    
+    % 1. Enforce Periodicity (Ghost Points)
+    % L = sum(track.vecmag);
+    % % size(alpha_ctrl)
+    % alpha_wrap = [alpha_ctrl(end-2:end) alpha_ctrl alpha_ctrl(1:3)];
+    % s_wrap     = [s_ctrl(end-2:end) - L; s_ctrl;     s_ctrl(1:3) + L];
+    % 
+    % % 2. Interpolate using the padded arrays
+    % alpha_full = makima(s_wrap, alpha_wrap, s_full);
+
+    % 1. Interpolate to the full 900 points
+    alpha_full = makima(s_ctrl, alpha_ctrl, s_full);
+    
+    % 2. ENFORCE TRACK LIMITS (The Penalty Method)
+    car_margin = 0.5;
+    c_left  = alpha_full - track.w(:,1) + car_margin;
+    c_right = -alpha_full - track.w(:,2) + car_margin;
+    
+    % Find the maximum distance the car went out of bounds anywhere on track
+    max_violation = max([c_left; c_right; 0]); 
+    
+    % 3. Calculate Geometry
+    % nx = track.vecleft(:,1) ./ track.vecmag;
+    % ny = track.vecleft(:,2) ./ track.vecmag;
+    % X_race = track.m(:,1) + alpha_full .* nx;
+    % Y_race = track.m(:,2) + alpha_full .* ny;
+    % 
+    % dx = gradient(X_race);
+    % dy = gradient(Y_race);
+    % ddx = gradient(dx);
+    % ddy = gradient(dy);
+    
+    % kappa = (dx .* ddy - dy .* ddx) ./ ((dx.^2 + dy.^2).^(3/2));
+    % ds_race = sqrt(dx.^2 + dy.^2); 
+    
+    % 4. Run the Fast V^2 Aero Physics Model
+    % (Using the calcAeroSpeedProfileFast function we built previously)
+    actual_lap_time = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, car);
+    
+    % 5. Apply the Penalty
+    if max_violation > 0
+        % If out of bounds, add 10 seconds of penalty per meter of violation
+        % This mathematically "walls off" the outside of the track
+        cost_time = actual_lap_time + (10.0 * max_violation);
+    else if alpha_full(1) ~= alpha_full(end)
+        cost_time = actual_lap_time + (20.0 * max_violation);
+    else
+        cost_time = actual_lap_time;
+    end
+end

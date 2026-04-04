@@ -1,4 +1,4 @@
-function cost = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par)
+function [cost,v_profile] = calcTimeAndVelocity(alpha_ctrl, s_ctrl, s_full, track, par)
     
     addpath("functions\")
 
@@ -25,7 +25,7 @@ function cost = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par)
     Lconst = 0.5 * par.rho * par.CLA; % Downforce constant
     Dconst = 0.5 * par.rho * par.CDA; % Drag constant
     
-    par.Vmax = par.F_engine/();
+    % par.Vmax = sqrt(par.F_engine/(par.CDA*0.5*par.rho));
 
     %% PASS 1: The Aero Grip Ceiling
     denominator = (par.m .* abs(kappa)) - (track.mu * Lconst);
@@ -52,8 +52,8 @@ function cost = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par)
         
         % 3. Calculate Max Braking Force (Grip limit)
         % Note: If you add an aerodynamic DRAG term (CDA), you add it here!
-        % F_brake_total = (track.mu * F_normal) + (0.5 * car.rho * car.CDA * v2_next);
-        F_brake_total = track.mu * F_normal; 
+        F_brake_total = (track.mu * F_normal) + (Dconst * v2_next);
+        % F_brake_total = track.mu * F_normal; 
         
         % 4. Convert to deceleration and update
         a_brake = F_brake_total / par.m;
@@ -63,32 +63,62 @@ function cost = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par)
     end
     
     %% PASS 3: Forward Integration (Acceleration Zones)
+    % for i = 2:N
+    %     % 1. What is the speed at the PREVIOUS point?
+    %     v2_prev = v2_profile(i-1);
+    %     v_prev = sqrt(v2_prev);
+    % 
+    %     % 2. Calculate Total Normal Force
+    %     F_normal = par.m * g + (Lconst * v2_prev);
+    % 
+    %     % 3. Calculate available grip for acceleration
+    %     F_grip_avail = track.mu * F_normal;
+    % 
+    %     % 4. Actual acceleration is limited by EITHER the engine or the tire grip
+    %     F_accel = min(F_grip_avail, (par.accelmax*g*par.m)); % par.accelmax*g*par.m
+    % 
+    %     % 5. Convert to acceleration and update
+    %     a_accel = F_accel / par.m;
+    %     delta_v2 = 2 * a_accel * ds(i-1);
+    % 
+    %     v2_profile(i) = min(v2_profile(i), v2_prev + delta_v2);
+    % end
     for i = 2:N
-        % 1. What is the speed at the PREVIOUS point?
         v2_prev = v2_profile(i-1);
         
-        % 2. Calculate Total Normal Force
-        F_normal = par.m * g + (Lconst * v2_prev);
+        % We need true velocity to calculate engine thrust
+        v_prev = sqrt(v2_prev); 
         
-        % 3. Calculate available grip for acceleration
+        % 1. Calculate Aerodynamic Forces
+        F_downforce = Lconst * v2_prev;
+        F_drag      = Dconst * v2_prev;
+        
+        % 2. Calculate Total Normal Force & Available Grip
+        F_normal = par.m * 9.81 + F_downforce;
         F_grip_avail = track.mu * F_normal;
         
-        % 4. Actual acceleration is limited by EITHER the engine or the tire grip
-        F_accel = min(F_grip_avail, par.accelmax*g*par.m);
+        % 3. Calculate Engine Thrust (The Power Model)
+        if v_prev < 1.0 % Prevent divide-by-zero at standstill
+            F_engine = par.F_engine_max;
+        else
+            F_engine = min(par.P_engine / v_prev, par.F_engine_max);
+        end
         
-        % 5. Convert to acceleration and update
+        % 4. Calculate Net Engine Thrust
+        F_thrust_net = F_engine - F_drag;
+        
+        % 5. Actual acceleration force (Traction Limited vs Power Limited)
+        F_accel = min(F_grip_avail, F_thrust_net);
+        
+        % 6. Convert to acceleration and update
         a_accel = F_accel / par.m;
         delta_v2 = 2 * a_accel * ds(i-1);
         
         v2_profile(i) = min(v2_profile(i), v2_prev + delta_v2);
     end
     
-    % (Optional: Run Pass 2 and 3 a second time here to stitch the start/finish boundary)
-    
-    %% Final Wrap-up
     v_profile = sqrt(v2_profile);
-
-    cost = sum(ds./v_profile);
+    cost = 10*sum(ds./v_profile);
 
 end
 

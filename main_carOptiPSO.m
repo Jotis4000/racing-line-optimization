@@ -36,34 +36,23 @@ lineopti.alpha_guess = zeros(n_var, 1);
 
 %%% OPTIMIZATION ROUTINE
 
-% Define fmincon options
-options = optimoptions('fmincon', ...
-    'Algorithm', 'sqp', ...
-    'Display', 'iter', ...
-    'MaxFunctionEvaluations', 20000, ... 
-    'MaxIterations', 10, ...           
-    'StepTolerance', 1e-6, ...
-    'OptimalityTolerance', 1e-6);
+objectiveFcnPSO = @(alpha) calcLapTimePSO(alpha, lineopti.s_ctrl, lineopti.s_full, track, par);
 
-% objectiveFcn = @(alpha) calcLapTimeCost(alpha, lineopti.s_ctrl, lineopti.s_full, track, par);
-objectiveFcn = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par);
+% Turn on the parallel pool (if not already running)
+if isempty(gcp('nocreate'))
+    parpool; 
+end
 
-% Equality constraints
-% First and last point need to have the same position and direction
-Aeq = zeros(2, n_var);
-beq = zeros(2, 1); % The right side of the equations (both equal 0)
+% Set up PSO options
+options_pso = optimoptions('particleswarm', ...
+    'SwarmSize', 200, ...               % More particles = better global search
+    'MaxIterations', 200, ...           % Generations to run
+    'UseParallel', true, ...            % VITAL: Evaluates the swarm across all CPU cores
+    'Display', 'iter');       % Let patternsearch finish the job at the end     'HybridFcn', @patternsearch
 
-Aeq(1, 1)   = 1;
-Aeq(1, end) = -1;
-
-Aeq(2, 1)     = -1;
-Aeq(2, 2)     =  1;
-Aeq(2, end-1) =  1;
-Aeq(2, end)   = -1;
-
-% x = fmincon(fun,x0,A,b,Aeq,beq,lb,ub,nonlcon,options)
-lineopti.alpha_opt = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
-% lineopti.alpha_opt = patternsearch(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
+% Run the Swarm!
+% x = particleswarm(fun,nvars,lb,ub,options)
+lineopti.alpha_opt = particleswarm(objectiveFcnPSO, n_var, lb, ub, options_pso);
 
 %%% Generate optimized line and plot result
 lineopti.alpha_opti_full = makima(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
