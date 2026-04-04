@@ -19,7 +19,8 @@ addpath("functions\")
 % Run Params
 trackplot=false;
 
-n_var = 40;          % Number of Design Variables for Interpolation
+par = carParams();
+n_var = 400;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
 % Generate Track
@@ -78,6 +79,8 @@ lineopti.alpha_opt = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, be
 %%% Generate optimized line and plot result
 lineopti.alpha_opti_full = makima(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
 lineopti.optimized = track.m+track.vecleft./track.vecmag.*lineopti.alpha_opti_full;
+
+figure;
 plot(track.m(:,1),track.m(:,2),lineopti.optimized(:,1),lineopti.optimized(:,2),track.l(:,1),track.l(:,2),track.r(:,1),track.r(:,2))
 legend("Centerline","Optimized Line","Left Bound","Right Bound")
 
@@ -94,3 +97,14 @@ fprintf("Track Midline Square Curvature: %e\n", track.kappasquare)
 fprintf("Track Midline Length [m]: %e\n", track.length)
 fprintf("Optimized Line Square Curvature: %e\n", lineopti.kappasquare)
 fprintf("Line Length [m]: %e\n", lineopti.length)
+
+% test1 = calcLapTimeCost(lineopti.alpha_guess, lineopti.s_ctrl, lineopti.s_full, track, par)
+% test2 = calcLapTimeCost(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par)
+% 
+% figure;
+% plot(test1)
+% hold on
+% plot(test2)
+% 
+% a = mean(test1)
+% b = mean(test2)

@@ -3,7 +3,7 @@ function track = genTrack(plt)
     %% Parameters
     addpath("tracks\")
 
-    FileName = "Spa.csv";
+    FileName = "Budapest.csv";
     datat = xlsread(FileName); % x_m, y_m, w_right, w_left
 
     track.m = [datat(:,1) datat(:,2)]; % X, Y
@@ -32,6 +32,6 @@ function track = genTrack(plt)
     ddy = gradient(dy);
     track.kappasquare = sum(((dx .* ddy - dy .* ddx) ./ ((dx.^2 + dy.^2).^(3/2))).^2);
 
-    track.mu = 1.4; % Ground friction coefficient
+    track.mu = 1.7; % Ground friction coefficient
 
 end
