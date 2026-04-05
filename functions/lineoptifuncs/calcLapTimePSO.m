@@ -20,20 +20,23 @@ function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, car)
     % Find the maximum distance the car went out of bounds anywhere on track
     max_violation = max([c_left; c_right; 0]); 
     
-    % 3. Calculate Geometry
-    % nx = track.vecleft(:,1) ./ track.vecmag;
-    % ny = track.vecleft(:,2) ./ track.vecmag;
-    % X_race = track.m(:,1) + alpha_full .* nx;
-    % Y_race = track.m(:,2) + alpha_full .* ny;
-    % 
-    % dx = gradient(X_race);
-    % dy = gradient(Y_race);
-    % ddx = gradient(dx);
-    % ddy = gradient(dy);
+    %3. Calculate Geometry
+    nx = track.vecleft(:,1) ./ track.vecmag;
+    ny = track.vecleft(:,2) ./ track.vecmag;
+    X_race = track.m(:,1) + alpha_full .* nx;
+    Y_race = track.m(:,2) + alpha_full .* ny;
+
+    dx = gradient(X_race);
+    dy = gradient(Y_race);
+    ddx = gradient(dx);
+    ddy = gradient(dy);
     
-    % kappa = (dx .* ddy - dy .* ddx) ./ ((dx.^2 + dy.^2).^(3/2));
+    kappa = (dx .* ddy - dy .* ddx) ./ ((dx.^2 + dy.^2).^(3/2));
     % ds_race = sqrt(dx.^2 + dy.^2); 
     
+    %steering lim
+    kappa_max = 1 / car.R_min;
+    steering_violation = max(max(abs(kappa)) - kappa_max, 0);
     % 4. Run the Fast V^2 Aero Physics Model
     % (Using the calcAeroSpeedProfileFast function we built previously)
     actual_lap_time = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, car);
@@ -47,5 +50,9 @@ function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, car)
         cost_time = actual_lap_time + (20.0 * max_violation);
     else
         cost_time = actual_lap_time;
+    end
+    
+    if steering_violation > 0
+        cost_time = cost_time + (50.0 * steering_violation);
     end
 end
