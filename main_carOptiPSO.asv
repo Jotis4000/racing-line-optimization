@@ -14,7 +14,7 @@ par = carParams();
 n_var = 80;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
-splineType = 'bspline'; % 'makima', 'bspline'
+splineType = 'makima'; % 'makima', 'bspline'
 
 % Generate Track
 track = genTrack(trackplot);
@@ -28,8 +28,10 @@ lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl);
 
 % fmincon lower and upper bounds (alpha is positive to the left)
 
-lb = -lineopti.w_right_ctrl + car_margin-4; 
-ub =  lineopti.w_left_ctrl  - car_margin+4;
+if 
+bmargin = 5;
+lb = -lineopti.w_right_ctrl + car_margin-bmargin; 
+ub =  lineopti.w_left_ctrl  - car_margin+bmargin;
 
 % Initial guess (start exactly on the centerline, so alpha = 0)
 lineopti.alpha_guess = zeros(n_var, 1);
@@ -38,37 +40,25 @@ lineopti.alpha_guess = zeros(n_var, 1);
 
 %%% OPTIMIZATION ROUTINE
 
-% Define fmincon options
-options = optimoptions('fmincon', ...
-    'Algorithm', 'sqp', ...
-    'Display', 'iter', ...
-    'MaxFunctionEvaluations', 20000, ... 
-    'MaxIterations', 100, ...           
-    'StepTolerance', 1e-6, ...
-    'OptimalityTolerance', 1e-6);
+objectiveFcnPSO = @(alpha) calcLapTimePSO(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
 
-% objectiveFcn = @(alpha) calcLapTimeCost(alpha, lineopti.s_ctrl, lineopti.s_full, track, par);
-objectiveFcn = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
+% Turn on the parallel pool (if not already running)
+if isempty(gcp('nocreate'))
+    parpool; 
+end
 
-% Equality constraints
-% First and last point need to have the same position and direction
-Aeq = zeros(2, n_var);
-beq = zeros(2, 1); % The right side of the equations (both equal 0)
+% Set up PSO options
+options_pso = optimoptions('particleswarm', ...
+    'SwarmSize', 200, ...               % More particles = better global search
+    'MaxIterations', 50, ...           % Generations to run
+    'UseParallel', true, ...            % VITAL: Evaluates the swarm across all CPU cores
+    'Display', 'iter');       % Let patternsearch finish the job at the end     'HybridFcn', @patternsearch
 
-Aeq(1, 1)   = 1;
-Aeq(1, end) = -1;
-
-Aeq(2, 1)     = -1;
-Aeq(2, 2)     =  1;
-Aeq(2, end-1) =  1;
-Aeq(2, end)   = -1;
-
-% x = fmincon(fun,x0,A,b,Aeq,beq,lb,ub,nonlcon,options)
-lineopti.alpha_opt = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
-% lineopti.alpha_opt = patternsearch(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
+% Run the Swarm!
+% x = particleswarm(fun,nvars,lb,ub,options)
+lineopti.alpha_opt = particleswarm(objectiveFcnPSO, n_var, lb, ub, options_pso)';
 
 %%% Generate optimized line and plot result
-
 if isequal(splineType,'makima')
     lineopti.alpha_opti_full = makima(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
 elseif isequal(splineType,'bspline')
@@ -77,7 +67,6 @@ elseif isequal(splineType,'bspline')
     b_spline_curve = spmak(bknots, lineopti.alpha_opt');
     lineopti.alpha_opti_full = fnval(b_spline_curve, lineopti.s_full);
 end
-
 lineopti.optimized = track.m+track.vecleft./track.vecmag.*lineopti.alpha_opti_full;
 
 figure;

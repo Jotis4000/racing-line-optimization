@@ -1,16 +1,21 @@
-function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, par)
-    
-    % 1. Enforce Periodicity (Ghost Points)
-    % L = sum(track.vecmag);
-    % % size(alpha_ctrl)
-    % alpha_wrap = [alpha_ctrl(end-2:end) alpha_ctrl alpha_ctrl(1:3)];
-    % s_wrap     = [s_ctrl(end-2:end) - L; s_ctrl;     s_ctrl(1:3) + L];
-    % 
-    % % 2. Interpolate using the padded arrays
-    % alpha_full = makima(s_wrap, alpha_wrap, s_full);
+function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, par, splineType)
+
+    % size(alpha_ctrl)
+    % size(s_ctrl)
+    % size(s_full)
+    % alpha_ctrl = alpha_ctrl';
 
     % 1. Interpolate to the full 900 points
-    alpha_full = makima(s_ctrl, alpha_ctrl, s_full);
+    if isequal(splineType,'makima')
+        alpha_full = makima(s_ctrl, alpha_ctrl, s_full);
+    elseif isequal(splineType,'bspline')
+        alpha_ctrl = alpha_ctrl';
+        bdeg = 3;
+        bknots = augknt(s_ctrl,bdeg+1);
+        b_spline_curve = spmak(bknots, alpha_ctrl');
+        alpha_full = fnval(b_spline_curve, s_full);
+        % size(alpha_full)
+    end
     
     % 2. ENFORCE TRACK LIMITS (The Penalty Method)
     car_margin = 0.5;
@@ -39,7 +44,7 @@ function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, par)
     steering_violation = max(max(abs(kappa)) - kappa_max, 0);
     % 4. Run the Fast V^2 Aero Physics Model
     % (Using the calcAeroSpeedProfileFast function we built previously)
-    actual_lap_time = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par);
+    actual_lap_time = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par, splineType);
     
     % 5. Apply the Penalty
     if max_violation > 0

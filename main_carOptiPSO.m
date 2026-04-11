@@ -14,6 +14,8 @@ par = carParams();
 n_var = 80;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
+splineType = 'makima'; % 'makima', 'bspline'
+
 % Generate Track
 track = genTrack(trackplot);
 
@@ -26,17 +28,20 @@ lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl);
 
 % fmincon lower and upper bounds (alpha is positive to the left)
 
-lb = -lineopti.w_right_ctrl + car_margin; 
-ub =  lineopti.w_left_ctrl  - car_margin;
+if isequal(splineType,'makima')
+    bmargin = 0;
+elseif isequal(splineType,'bspline')
+    bmargin = 5;
+end
+lb = -lineopti.w_right_ctrl + car_margin-bmargin; 
+ub =  lineopti.w_left_ctrl  - car_margin+bmargin;
 
 % Initial guess (start exactly on the centerline, so alpha = 0)
 lineopti.alpha_guess = zeros(n_var, 1);
 
-% test = calcLapTimeCost(lineopti.alpha_guess, lineopti.s_ctrl, lineopti.s_full, track, par);
-
 %%% OPTIMIZATION ROUTINE
 
-objectiveFcnPSO = @(alpha) calcLapTimePSO(alpha, lineopti.s_ctrl, lineopti.s_full, track, par);
+objectiveFcnPSO = @(alpha) calcLapTimePSO(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
 
 % Turn on the parallel pool (if not already running)
 if isempty(gcp('nocreate'))
@@ -46,16 +51,23 @@ end
 % Set up PSO options
 options_pso = optimoptions('particleswarm', ...
     'SwarmSize', 200, ...               % More particles = better global search
-    'MaxIterations', 200, ...           % Generations to run
+    'MaxIterations', 5, ...           % Generations to run
     'UseParallel', true, ...            % VITAL: Evaluates the swarm across all CPU cores
     'Display', 'iter');       % Let patternsearch finish the job at the end     'HybridFcn', @patternsearch
 
 % Run the Swarm!
 % x = particleswarm(fun,nvars,lb,ub,options)
-lineopti.alpha_opt = particleswarm(objectiveFcnPSO, n_var, lb, ub, options_pso);
+lineopti.alpha_opt = particleswarm(objectiveFcnPSO, n_var, lb, ub, options_pso)';
 
 %%% Generate optimized line and plot result
-lineopti.alpha_opti_full = makima(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
+if isequal(splineType,'makima')
+    lineopti.alpha_opti_full = makima(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
+elseif isequal(splineType,'bspline')
+    bdeg = 3;
+    bknots = augknt(lineopti.s_ctrl,bdeg+1);
+    b_spline_curve = spmak(bknots, lineopti.alpha_opt');
+    lineopti.alpha_opti_full = fnval(b_spline_curve, lineopti.s_full);
+end
 lineopti.optimized = track.m+track.vecleft./track.vecmag.*lineopti.alpha_opti_full;
 
 figure;

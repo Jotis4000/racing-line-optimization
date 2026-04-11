@@ -118,7 +118,7 @@ function [cost,v_profile] = calcTimeAndVelocity(alpha_ctrl, s_ctrl, s_full, trac
     end
     
     v_profile = sqrt(v2_profile);
-    cost = 10*sum(ds./v_profile);
+    cost = sum(ds./v_profile);
 
 end
 
