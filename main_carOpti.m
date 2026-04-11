@@ -11,7 +11,7 @@ addpath("functions\lineoptifuncs\")
 trackplot=false;
 
 par = carParams();
-n_var = 80;          % Number of Design Variables for Interpolation
+n_var = 200;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
 guess = 'center'; % 'center', 'geom'
@@ -23,6 +23,10 @@ track = genTrack(trackplot);
 % Set up for optimizer
 lineopti.s_full = [0; cumsum(track.vecmag(1:end-1))];        % Cumulative distance
 lineopti.s_ctrl = linspace(0, lineopti.s_full(end), n_var)';
+
+corner_weight = 20;    % How strongly corners pull nodes (Multiplier)
+smoothing_window = 50; % How wide the apex cluster is
+lineopti.s_ctrl = genAdaptiveNodes(lineopti.s_full, track.m, n_var, corner_weight, smoothing_window);
 
 lineopti.w_left_ctrl = interp1(lineopti.s_full, track.w(:,1), lineopti.s_ctrl);
 lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl);
@@ -76,10 +80,10 @@ end
 options = optimoptions('fmincon', ...
     'Algorithm', 'sqp', ...
     'Display', 'iter', ...
-    'MaxFunctionEvaluations', 20000, ... 
-    'MaxIterations', 10, ...           
+    'MaxFunctionEvaluations', 20000000, ... 
+    'MaxIterations', 2000, ...           
     'StepTolerance', 1e-6, ...
-    'OptimalityTolerance', 1e-6);
+    'OptimalityTolerance', 1e-6); %, 'FiniteDifferenceType', 'central');
 
 objectiveFcn = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
 

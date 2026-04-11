@@ -1,6 +1,6 @@
 function cost = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par, splineType)
     
-    addpath("functions\")
+    % addpath("functions\")
 
     % size(alpha_ctrl)
     % size(s_ctrl)
@@ -57,63 +57,89 @@ function cost = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par, sp
         end
     end
     
-    %% PASS 2: Backward Integration (Braking Zones)
-    for i = (N-1):-1:1
-        % 1. What is the speed at the NEXT point?
-        v2_next = v2_profile(i+1);
+    %% THE LAP STITCHING LOOP
+    % We run the backward and forward passes twice to wrap the start/finish line
+    for pass_iter = 1:2
         
-        % 2. Calculate Total Normal Force at that speed
-        F_normal = par.m * g + (Lconst * v2_next);
+        %% PASS 2: Backward Integration (Braking Zones)
+        % --- THE BACKWARD BRIDGE ---
+        % Can the car safely brake from point 1 down to point N?
+        dist_N_to_1 = sqrt((X_race(1)-X_race(N))^2 + (Y_race(1)-Y_race(N))^2);
         
-        % 3. Calculate Max Braking Force (Grip limit)
-        % Note: If you add an aerodynamic DRAG term (CDA), you add it here!
-        F_brake_total = (track.mu * F_normal) + (Dconst * v2_next);
-        % F_brake_total = track.mu * F_normal; 
+        v2_next_bridge = v2_profile(1);
+        F_normal_bridge = par.m * g + (Lconst * v2_next_bridge);
+        F_brake_total_bridge = (track.mu * F_normal_bridge) + (Dconst * v2_next_bridge);
+        a_brake_bridge = F_brake_total_bridge / par.m;
+        delta_v2_bridge = 2 * a_brake_bridge * dist_N_to_1;
         
-        % 4. Convert to deceleration and update
-        a_brake = F_brake_total / par.m;
-        delta_v2 = 2 * a_brake * ds(i);
+        v2_profile(N) = min(v2_profile(N), v2_next_bridge + delta_v2_bridge);
         
-        v2_profile(i) = min(v2_profile(i), v2_next + delta_v2);
-    end
-    
-    %% PASS 3: Forward Integration (Acceleration Zones)
-    for i = 2:N
-        v2_prev = v2_profile(i-1);
-        
-        % We need true velocity to calculate engine thrust
-        v_prev = sqrt(v2_prev); 
-        
-        % 1. Calculate Aerodynamic Forces
-        F_downforce = Lconst * v2_prev;
-        F_drag      = Dconst * v2_prev;
-        
-        % 2. Calculate Total Normal Force & Available Grip
-        F_normal = par.m * 9.81 + F_downforce;
-        F_grip_avail = track.mu * F_normal;
-        
-        % 3. Calculate Engine Thrust (The Power Model)
-        if v_prev < 1.0 % Prevent divide-by-zero at standstill
-            F_engine = par.F_engine_max;
-        else
-            F_engine = min(par.P_engine / v_prev, par.F_engine_max);
+        % --- STANDARD BACKWARD PASS ---
+        for i = (N-1):-1:1
+            v2_next = v2_profile(i+1);
+            F_normal = par.m * g + (Lconst * v2_next);
+            F_brake_total = (track.mu * F_normal) + (Dconst * v2_next);
+            a_brake = F_brake_total / par.m;
+            delta_v2 = 2 * a_brake * ds(i);
+            
+            v2_profile(i) = min(v2_profile(i), v2_next + delta_v2);
         end
         
-        % 4. Calculate Net Engine Thrust
-        F_thrust_net = F_engine - F_drag;
+        %% PASS 3: Forward Integration (Acceleration Zones)
+        % --- THE FORWARD BRIDGE ---
+        % Accelerate the car from the final point (N) across the start line (1)
+        v2_prev_bridge = v2_profile(N);
+        v_prev_bridge = sqrt(v2_prev_bridge); 
         
-        % 5. Actual acceleration force (Traction Limited vs Power Limited)
-        F_accel = min(F_grip_avail, F_thrust_net);
+        F_downforce_bridge = Lconst * v2_prev_bridge;
+        F_drag_bridge      = Dconst * v2_prev_bridge;
+        F_normal_bridge = par.m * 9.81 + F_downforce_bridge;
+        F_grip_avail_bridge = track.mu * F_normal_bridge;
         
-        % 6. Convert to acceleration and update
-        a_accel = F_accel / par.m;
-        delta_v2 = 2 * a_accel * ds(i-1);
+        if v_prev_bridge < 1.0 
+            F_engine_bridge = par.F_engine_max;
+        else
+            F_engine_bridge = min(par.P_engine / v_prev_bridge, par.F_engine_max);
+        end
         
-        v2_profile(i) = min(v2_profile(i), v2_prev + delta_v2);
-    end
+        F_thrust_net_bridge = F_engine_bridge - F_drag_bridge;
+        F_accel_bridge = min(F_grip_avail_bridge, F_thrust_net_bridge);
+        a_accel_bridge = F_accel_bridge / par.m;
+        delta_v2_bridge = 2 * a_accel_bridge * dist_N_to_1;
+        
+        v2_profile(1) = min(v2_profile(1), v2_prev_bridge + delta_v2_bridge);
+
+        % --- STANDARD FORWARD PASS ---
+        for i = 2:N
+            v2_prev = v2_profile(i-1);
+            v_prev = sqrt(v2_prev); 
+            F_downforce = Lconst * v2_prev;
+            F_drag      = Dconst * v2_prev;
+            F_normal = par.m * 9.81 + F_downforce;
+            F_grip_avail = track.mu * F_normal;
+            
+            if v_prev < 1.0 
+                F_engine = par.F_engine_max;
+            else
+                F_engine = min(par.P_engine / v_prev, par.F_engine_max);
+            end
+            
+            F_thrust_net = F_engine - F_drag;
+            F_accel = min(F_grip_avail, F_thrust_net);
+            a_accel = F_accel / par.m;
+            delta_v2 = 2 * a_accel * ds(i-1);
+            
+            v2_profile(i) = min(v2_profile(i), v2_prev + delta_v2);
+        end
+        
+    end % End of double-pass loop
     
     v_profile = sqrt(v2_profile);
-    cost = 10*sum(ds./v_profile);
+    laptime_cost = 10*sum(ds./v_profile);
+    alpha_wiggle = diff(alpha_ctrl, 2);
+    smoothness_penalty = sum(alpha_wiggle.^2);
+    
+    cost = laptime_cost + (0.001 * smoothness_penalty);
 
 end
 

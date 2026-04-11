@@ -62,8 +62,8 @@ Aeq(2, end)   = -1;
 fprintf('\n--- Starting Phase 1: PSO (Global Search) ---\n');
 
 % PSO Hyperparameters
-n_particles = 200;     
-n_iterations = 500;   
+n_particles = 2000;     
+n_iterations = 50;   
 w = 0.7; cp = 1.5; cg = 1.5; 
 verbose = true;       
 
@@ -84,14 +84,14 @@ fprintf('\n--- Starting Phase 2: fmincon (Local Smoothing) ---\n');
 
 % fmincon Objective Function WITHOUT Penalty
 % fmincon natively handles the Aeq/beq equality constraints perfectly.
-objectiveFcnExact = @(alpha) calcLapTimeCostDetailAdapt(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima', 0.001);
+objectiveFcnExact = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima');
 
 % fmincon Options
 options = optimoptions('fmincon', ...
     'Algorithm', 'sqp', ...       
     'Display', 'iter', ...
-    'MaxFunctionEvaluations', 20000000, ...
-    'MaxIterations', 2000, ...
+    'MaxFunctionEvaluations', 200000, ...
+    'MaxIterations', 300, ...
     'StepTolerance', 1e-6);
 
 % Run fmincon using the PSO output as the starting guess

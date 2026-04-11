@@ -11,7 +11,7 @@ function par = carParams()
     par.R_min = 5.0;
     
     % Second Order Params - Required for more advanced model
-    par.CLA = 4.8;
+    par.CLA = 4.5;
     par.CDA = 1.2;
     par.rho = 1.225;
     par.accelmax = 1.5; % g

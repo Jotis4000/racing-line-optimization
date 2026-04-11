@@ -11,10 +11,11 @@ addpath("functions\lineoptifuncs\")
 trackplot=false;
 
 par = carParams();
-n_var = 150;          % Number of Design Variables for Interpolation
+n_var = 100;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
 splineType = 'makima'; % 'makima', 'bspline'
+guess = 'center';
 
 % Generate Track
 track = genTrack(trackplot);
@@ -22,6 +23,11 @@ track = genTrack(trackplot);
 % Set up for optimizer
 lineopti.s_full = [0; cumsum(track.vecmag(1:end-1))];        % Cumulative distance
 lineopti.s_ctrl = linspace(0, lineopti.s_full(end), n_var)';
+
+%%% ADAPTIVE NODE SPACING
+% corner_weight = 20;    % How strongly corners pull nodes (Multiplier)
+% smoothing_window = 50; % How wide the apex cluster is
+% lineopti.s_ctrl = genAdaptiveNodes(lineopti.s_full, track.m, n_var, corner_weight, smoothing_window);
 
 lineopti.w_left_ctrl = interp1(lineopti.s_full, track.w(:,1), lineopti.s_ctrl);
 lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl);
@@ -37,22 +43,94 @@ lb = -lineopti.w_right_ctrl + car_margin-bmargin;
 ub =  lineopti.w_left_ctrl  - car_margin+bmargin;
 
 % Initial guess (start exactly on the centerline, so alpha = 0)
+% Initial guess (start exactly on the centerline, so alpha = 0)
 lineopti.alpha_guess = zeros(n_var, 1);
+
+if isequal(guess,'center')
+    lineopti.alpha_guess = zeros(n_var, 1);
+elseif isequal(guess,'geom')
+    options = optimoptions('fmincon', ...
+        'Algorithm', 'sqp', ...
+        'Display', 'iter', ...
+        'MaxFunctionEvaluations', 200000, ... 
+        'MaxIterations', 2000, ...           
+        'StepTolerance', 1e-8, ...
+        'OptimalityTolerance', 1e-8);
+
+    weight_length = 0.25;
+    objectiveFcn = @(alpha) calcCurvatureCost(alpha, lineopti.s_ctrl, lineopti.s_full, track, weight_length);
+
+    Aeq = zeros(2, n_var);
+    beq = zeros(2, 1); % The right side of the equations (both equal 0)
+    
+    Aeq(1, 1)   = 1;
+    Aeq(1, end) = -1;
+    
+    Aeq(2, 1)     = -1;
+    Aeq(2, 2)     =  1;
+    Aeq(2, end-1) =  1;
+    Aeq(2, end)   = -1;
+    
+    % x = fmincon(fun,x0,A,b,Aeq,beq,lb,ub,nonlcon,options)
+    lineopti.alpha_opt = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
+    lineopti.alpha_guess = lineopti.alpha_opt;
+end
+
+% Define fmincon options
+options = optimoptions('fmincon', ...
+    'Algorithm', 'sqp', ...
+    'Display', 'iter', ...
+    'MaxFunctionEvaluations', 20000, ... 
+    'MaxIterations', 100, ...           
+    'StepTolerance', 1e-6, ...
+    'OptimalityTolerance', 1e-6);
+
+objectiveFcn = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
+
+% Equality constraints
+% First and last point need to have the same position and direction
+Aeq = zeros(2, n_var);
+beq = zeros(2, 1); % The right side of the equations (both equal 0)
+
+Aeq(1, 1)   = 1;
+Aeq(1, end) = -1;
+
+Aeq(2, 1)     = -1;
+Aeq(2, 2)     =  1;
+Aeq(2, end-1) =  1;
+Aeq(2, end)   = -1;
+
+% x = fmincon(fun,x0,A,b,Aeq,beq,lb,ub,nonlcon,options)
+lineopti.alpha_guess = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
 
 %%% OPTIMIZATION ROUTINE
 
-objectiveFcnPSO = @(alpha) calcLapTimePSO(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
+% objectiveFcnPSO = @(alpha) calcLapTimePSO(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
 
-sigma0 = 0.3*ub;
+sigma0 = 3;
 % 3. CMA-ES Options
 opts = cmaes('defaults');
 opts.LBounds = lb; % Lower bound for offsets (e.g., -5 meters)
 opts.UBounds = ub;  % Upper bound for offsets (e.g., +5 meters)
-opts.MaxIter = 500; % Restrict iterations if just using it to find the best valley
-opts.DispModulo = 1; % Print updates to command window every 10 iterations
+opts.MaxIter = 2000; % Restrict iterations if just using it to find the best valley
+opts.DispModulo = 10; % Print updates to command window every 10 iterations
 
 % 4. Run the solver!
-[lineopti.alpha_opt, fmin, counteval, stopflag, out, bestever] = cmaes('calcLapTimeCostDetail', lineopti.alpha_guess, sigma0, opts, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
+[lineopti.alpha_guess, fmin, counteval, stopflag, out, bestever] = cmaes('calcLapTimeCostDetail', lineopti.alpha_guess, sigma0, opts, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
+
+% Define fmincon options
+options = optimoptions('fmincon', ...
+    'Algorithm', 'sqp', ...
+    'Display', 'iter', ...
+    'MaxFunctionEvaluations', 20000, ... 
+    'MaxIterations', 100, ...           
+    'StepTolerance', 1e-6, ...
+    'OptimalityTolerance', 1e-6);
+
+objectiveFcn = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
+
+% x = fmincon(fun,x0,A,b,Aeq,beq,lb,ub,nonlcon,options)
+lineopti.alpha_opt = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
 
 %%% Generate optimized line and plot result
 if isequal(splineType,'makima')
