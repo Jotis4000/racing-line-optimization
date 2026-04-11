@@ -11,10 +11,10 @@ addpath("functions\lineoptifuncs\")
 trackplot=false;
 
 par = carParams();
-n_var = 80;          % Number of Design Variables for Interpolation
+n_var = 150;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
-splineType = 'makima'; % 'makima', 'bspline'
+splineType = 'bspline'; % 'makima', 'bspline'
 
 % Generate Track
 track = genTrack(trackplot);
@@ -31,7 +31,7 @@ lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl);
 if isequal(splineType,'makima')
     bmargin = 0;
 elseif isequal(splineType,'bspline')
-    bmargin = 5;
+    bmargin = 10;
 end
 lb = -lineopti.w_right_ctrl + car_margin-bmargin; 
 ub =  lineopti.w_left_ctrl  - car_margin+bmargin;
@@ -51,7 +51,7 @@ end
 % Set up PSO options
 options_pso = optimoptions('particleswarm', ...
     'SwarmSize', 200, ...               % More particles = better global search
-    'MaxIterations', 5, ...           % Generations to run
+    'MaxIterations', 200, ...           % Generations to run
     'UseParallel', true, ...            % VITAL: Evaluates the swarm across all CPU cores
     'Display', 'iter');       % Let patternsearch finish the job at the end     'HybridFcn', @patternsearch
 
@@ -90,7 +90,7 @@ fprintf("Track Midline Length [m]: %e\n", track.length)
 fprintf("Optimized Line Square Curvature: %e\n", lineopti.kappasquare)
 fprintf("Line Length [m]: %e\n", lineopti.length)
 % lpha_ctrl, s_ctrl, s_full, track, par
-[laptime, vprof] = calcTimeAndVelocity(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par);
+[laptime, vprof] = calcTimeAndVelocity(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par,splineType);
 fprintf("Lap Time [s]: %e\n", laptime)
 
 figure;

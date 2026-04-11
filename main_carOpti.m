@@ -11,7 +11,7 @@ addpath("functions\lineoptifuncs\")
 trackplot=false;
 
 par = carParams();
-n_var = 80;          % Number of Design Variables for Interpolation
+n_var = 200;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
 splineType = 'bspline'; % 'makima', 'bspline'
@@ -28,8 +28,13 @@ lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl);
 
 % fmincon lower and upper bounds (alpha is positive to the left)
 
-lb = -lineopti.w_right_ctrl + car_margin-4; 
-ub =  lineopti.w_left_ctrl  - car_margin+4;
+if isequal(splineType,'makima')
+    bmargin = 0;
+elseif isequal(splineType,'bspline')
+    bmargin = 10;
+end
+lb = -lineopti.w_right_ctrl + car_margin-bmargin; 
+ub =  lineopti.w_left_ctrl  - car_margin+bmargin;
 
 % Initial guess (start exactly on the centerline, so alpha = 0)
 lineopti.alpha_guess = zeros(n_var, 1);
@@ -100,7 +105,7 @@ fprintf("Track Midline Length [m]: %e\n", track.length)
 fprintf("Optimized Line Square Curvature: %e\n", lineopti.kappasquare)
 fprintf("Line Length [m]: %e\n", lineopti.length)
 % lpha_ctrl, s_ctrl, s_full, track, par
-[laptime, vprof] = calcTimeAndVelocity(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par);
+[laptime, vprof] = calcTimeAndVelocity(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
 fprintf("Lap Time [s]: %e\n", laptime)
 
 figure;
