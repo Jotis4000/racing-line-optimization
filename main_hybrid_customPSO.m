@@ -3,118 +3,124 @@ clc;
 clear;
 close all;
 echo off; 
-
 addpath("functions\")
 addpath("functions\lineoptifuncs\")
 
 % Run Params
 trackplot = false;
 par = carParams();
+splineType = 'makima'; % Keeping 'makima' based on your previous bound-overshoot fix
 
 % -------------------------------------------------------------------------
-% n_var = 120 control points.
-% Because we are now using Adaptive Node Spacing, we can afford a higher 
-% point count without messing up the straights!
-n_var = 150;          
+% MULTI-GRID SETUP
+n_var_pso  = 50;   % Coarse Grid: Fast global search
+n_var_fmin = 250;  % Fine Grid: High-resolution local smoothing
 % -------------------------------------------------------------------------
-car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
+car_margin = 0.5;  
 
 % Generate Track
 track = genTrack(trackplot);
-% yo
-% Set up for optimizer
-lineopti.s_full = [0; cumsum(track.vecmag(1:end-1))];        % Cumulative distance
+
+% Set up baseline distance
+lineopti.s_full = [0; cumsum(track.vecmag(1:end-1))]; 
 
 %%% =======================================================
-%%% ADAPTIVE NODE SPACING
+%%% ADAPTIVE NODE SPACING (Creating TWO Grids)
 %%% =======================================================
-corner_weight = 20;    % How strongly corners pull nodes (Multiplier)
-smoothing_window = 50; % How wide the apex cluster is
-lineopti.s_ctrl = genAdaptiveNodes(lineopti.s_full, track.m, n_var, corner_weight, smoothing_window);
+corner_weight = 40;    
+smoothing_window = 30; 
 
-% Interpolate bounds to the new adaptive control points using spline
-lineopti.w_left_ctrl = interp1(lineopti.s_full, track.w(:,1), lineopti.s_ctrl, 'spline');
-lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl, 'spline');
-%%% =======================================================
+% 1. Coarse Grid (For PSO)
+lineopti.s_ctrl_pso = genAdaptiveNodes(lineopti.s_full, track.m, n_var_pso, corner_weight, smoothing_window);
+lineopti.w_left_pso  = interp1(lineopti.s_full, track.w(:,1), lineopti.s_ctrl_pso, 'spline');
+lineopti.w_right_pso = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl_pso, 'spline');
 
-% Lower and upper bounds (alpha is positive to the left)
-lb = -lineopti.w_right_ctrl + car_margin; 
-ub =  lineopti.w_left_ctrl  - car_margin;
+lb_pso = -lineopti.w_right_pso + car_margin; 
+ub_pso =  lineopti.w_left_pso  - car_margin;
 
-% Equality constraints (Start and end points must match position and direction)
-% This ensures the track is a perfectly closed loop.
-Aeq = zeros(2, n_var);
+Aeq_pso = zeros(2, n_var_pso);
+Aeq_pso(1, 1) = 1; Aeq_pso(1, end) = -1;
+Aeq_pso(2, 1) = -1; Aeq_pso(2, 2) = 1; Aeq_pso(2, end-1) = 1; Aeq_pso(2, end) = -1;
+
+% 2. Fine Grid (For fmincon)
+lineopti.s_ctrl_fmin = genAdaptiveNodes(lineopti.s_full, track.m, n_var_fmin, corner_weight, smoothing_window);
+lineopti.w_left_fmin  = interp1(lineopti.s_full, track.w(:,1), lineopti.s_ctrl_fmin, 'spline');
+lineopti.w_right_fmin = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl_fmin, 'spline');
+
+lb_fmin = -lineopti.w_right_fmin + car_margin; 
+ub_fmin =  lineopti.w_left_fmin  - car_margin;
+
+Aeq_fmin = zeros(2, n_var_fmin);
+Aeq_fmin(1, 1) = 1; Aeq_fmin(1, end) = -1;
+Aeq_fmin(2, 1) = -1; Aeq_fmin(2, 2) = 1; Aeq_fmin(2, end-1) = 1; Aeq_fmin(2, end) = -1;
+
 beq = zeros(2, 1); 
-
-Aeq(1, 1)   = 1;
-Aeq(1, end) = -1;
-
-Aeq(2, 1)     = -1;
-Aeq(2, 2)     =  1;
-Aeq(2, end-1) =  1;
-Aeq(2, end)   = -1;
-
-%%% =======================================================
-%%% THE HYBRID SOLVER: PSO + fmincon
 %%% =======================================================
 
-%%% PHASE 1: GLOBAL SEARCH (The Scout - PSO)
-fprintf('\n--- Starting Phase 1: PSO (Global Search) ---\n');
 
-% PSO Hyperparameters
-n_particles = 200;     
-n_iterations = 500;   
+%%% =======================================================
+%%% THE HYBRID SOLVER: Cascaded Optimization
+%%% =======================================================
+
+%%% PHASE 1: GLOBAL SEARCH (COARSE GRID)
+fprintf('\n--- Starting Phase 1: PSO (Global Search on %d nodes) ---\n', n_var_pso);
+n_particles = 100;     
+n_iterations = 600;   
 w = 0.7; cp = 1.5; cg = 1.5; 
 verbose = true;       
 
-% PSO Objective Function WITH Penalty
 penalty_weight = 1e5;
-smooth_weight = 1.0; % Extra penalty for jagged lines during random PSO guessing
-objectiveFcnPSO = @(alpha) calcLapTimeCostDetailAdapt(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima', smooth_weight) ...
-                           + penalty_weight * sum((Aeq * alpha - beq).^2);
+% Using your new friction cost function for the optimizer
+objectiveFcnPSO = @(alpha) calcLapTimeCostDetailFriction(alpha, lineopti.s_ctrl_pso, lineopti.s_full, track, par, splineType) ...
+                           + penalty_weight * sum((Aeq_pso * alpha - beq).^2);
 
-% Run Custom PSO
 [alpha_pso_rough, best_cost_pso, gs_hist, eval_hist] = pso(...
-    objectiveFcnPSO, n_var, lb, ub, n_particles, n_iterations, w, cp, cg, verbose);
+    objectiveFcnPSO, n_var_pso, lb_pso, ub_pso, n_particles, n_iterations, w, cp, cg, verbose);
 
-fprintf('\nPhase 1 Complete. Handing rough line to fmincon for smoothing...\n');
+fprintf('\nPhase 1 Complete. Bridging grids...\n');
 
-%%% PHASE 2: LOCAL POLISH (The Polisher - fmincon)
-fprintf('\n--- Starting Phase 2: fmincon (Local Smoothing) ---\n');
+%%% THE BRIDGE: Upscale 50 nodes to 150 nodes
+alpha_fmin_guess = makima(lineopti.s_ctrl_pso, alpha_pso_rough, lineopti.s_ctrl_fmin);
+alpha_fmin_guess = max(min(alpha_fmin_guess, ub_fmin), lb_fmin); % Safety clamp
 
-% fmincon Objective Function WITHOUT Penalty
-% fmincon natively handles the Aeq/beq equality constraints perfectly.
-objectiveFcnExact = @(alpha) calcLapTimeCostDetailAdapt(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima', 0.001);
+%%% PHASE 2: LOCAL POLISH (FINE GRID)
+fprintf('\n--- Starting Phase 2: fmincon (Local Smoothing on %d nodes) ---\n', n_var_fmin);
 
-% fmincon Options
+objectiveFcnExact = @(alpha) calcLapTimeCostDetailFriction(alpha, lineopti.s_ctrl_fmin, lineopti.s_full, track, par, splineType);
+
 options = optimoptions('fmincon', ...
     'Algorithm', 'sqp', ...       
     'Display', 'iter', ...
     'MaxFunctionEvaluations', 20000000, ...
     'MaxIterations', 2000, ...
-    'StepTolerance', 1e-6);
+    'StepTolerance', 1e-6, ...
+    'OptimalityTolerance', 1e-6);
 
-% Run fmincon using the PSO output as the starting guess
-lineopti.alpha_opt = fmincon(objectiveFcnExact, alpha_pso_rough, [], [], Aeq, beq, lb, ub, [], options);
+lineopti.alpha_opt = fmincon(objectiveFcnExact, alpha_fmin_guess, [], [], Aeq_fmin, beq, lb_fmin, ub_fmin, [], options);
 
 fprintf('\n--- Hybrid Optimization Complete ---\n');
 
+
 %%% =======================================================
-%%% POST-PROCESSING & PLOTTING
+%%% POST-PROCESSING & PLOTTING (Updated to your format)
 %%% =======================================================
 
-%%% Generate optimized line and plot result (Ensuring 'spline' is used here to match objective function)
-lineopti.alpha_opti_full = spline(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
+%%% Generate optimized line
+if isequal(splineType,'makima')
+    lineopti.alpha_opti_full = makima(lineopti.s_ctrl_fmin, lineopti.alpha_opt, lineopti.s_full);
+elseif isequal(splineType,'bspline')
+    bdeg = 3;
+    bknots = augknt(lineopti.s_ctrl_fmin, bdeg+1);
+    b_spline_curve = spmak(bknots, lineopti.alpha_opt');
+    lineopti.alpha_opti_full = fnval(b_spline_curve, lineopti.s_full);
+end
+
 lineopti.optimized = track.m + track.vecleft ./ track.vecmag .* lineopti.alpha_opti_full;
 
-figure('Name', 'Track Optimization Result');
-plot(track.m(:,1), track.m(:,2), '--k', ...
-     lineopti.optimized(:,1), lineopti.optimized(:,2), '-b', ...
-     track.l(:,1), track.l(:,2), '-r', ...
-     track.r(:,1), track.r(:,2), '-r', 'LineWidth', 1.5)
-legend("Centerline", "Optimized Line", "Track Bounds", "", "Location", "best")
-axis equal;
-title('Optimized Racing Line (Hybrid Solver)');
+% Your requested Plot format
+figure;
+plot(track.m(:,1), track.m(:,2), lineopti.optimized(:,1), lineopti.optimized(:,2), track.l(:,1), track.l(:,2), track.r(:,1), track.r(:,2))
+legend("Centerline", "Optimized Line", "Left Bound", "Right Bound")
 
 %%% Calculate Line Parameters
 lineopti.dx = gradient(lineopti.optimized(:,1));
@@ -125,20 +131,17 @@ lineopti.kappasquare = sum(((lineopti.dx .* lineopti.ddy - lineopti.dy .* lineop
 lineopti.ds = sqrt(lineopti.dx.^2 + lineopti.dy.^2);
 lineopti.length = sum(lineopti.ds);
 
-fprintf("\n--- FINAL METRICS ---\n")
 fprintf("Track Midline Square Curvature: %e\n", track.kappasquare)
 fprintf("Track Midline Length [m]: %e\n", track.length)
 fprintf("Optimized Line Square Curvature: %e\n", lineopti.kappasquare)
 fprintf("Line Length [m]: %e\n", lineopti.length)
 
-% Calculate final lap time cost (Using 'spline' to match)
-final_laptime = calcLapTimeCostDetailAdapt(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima', 0.0);
-fprintf("Estimated Lap Time Cost: %e\n", final_laptime)
+% Calculate final actual laptime using your dedicated calcTimeAndVelocity function
+% Notice we pass s_ctrl_fmin here because lineopti.alpha_opt is mapped to the fine grid!
+[laptime, vprof] = calcTimeAndVelocity(lineopti.alpha_opt, lineopti.s_ctrl_fmin, lineopti.s_full, track, par, splineType);
 
-% Plot PSO Convergence just to see how the scout performed
-figure('Name', 'PSO Convergence (Phase 1)');
-plot(1:n_iterations, eval_hist, 'LineWidth', 2);
-title('PSO Convergence History (Phase 1)');
-xlabel('Iteration');
-ylabel('Penalized Cost');
-grid on;
+fprintf("Lap Time [s]: %e\n", laptime)
+
+% Your requested Velocity Plot format
+figure;
+plot(lineopti.s_full, vprof)
