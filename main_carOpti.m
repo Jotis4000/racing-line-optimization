@@ -11,7 +11,7 @@ addpath("functions\lineoptifuncs\")
 trackplot=false;
 
 par = carParams();
-n_var = 200;          % Number of Design Variables for Interpolation
+n_var = 300;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
 guess = 'center'; % 'center', 'geom'
