@@ -14,7 +14,7 @@ par = carParams();
 n_var = 150;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
-splineType = 'bspline'; % 'makima', 'bspline'
+splineType = 'makima'; % 'makima', 'bspline'
 
 % Generate Track
 track = genTrack(trackplot);
@@ -43,21 +43,16 @@ lineopti.alpha_guess = zeros(n_var, 1);
 
 objectiveFcnPSO = @(alpha) calcLapTimePSO(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
 
-% Turn on the parallel pool (if not already running)
-if isempty(gcp('nocreate'))
-    parpool; 
-end
+sigma0 = 0.3*ub;
+% 3. CMA-ES Options
+opts = cmaes('defaults');
+opts.LBounds = lb; % Lower bound for offsets (e.g., -5 meters)
+opts.UBounds = ub;  % Upper bound for offsets (e.g., +5 meters)
+opts.MaxIter = 500; % Restrict iterations if just using it to find the best valley
+opts.DispModulo = 1; % Print updates to command window every 10 iterations
 
-% Set up PSO options
-options_pso = optimoptions('particleswarm', ...
-    'SwarmSize', 200, ...               % More particles = better global search
-    'MaxIterations', 1000, ...           % Generations to run
-    'UseParallel', true, ...            % VITAL: Evaluates the swarm across all CPU cores
-    'Display', 'iter');       % Let patternsearch finish the job at the end     'HybridFcn', @patternsearch
-
-% Run the Swarm!
-% x = particleswarm(fun,nvars,lb,ub,options)
-lineopti.alpha_opt = particleswarm(objectiveFcnPSO, n_var, lb, ub, options_pso)';
+% 4. Run the solver!
+[lineopti.alpha_opt, fmin, counteval, stopflag, out, bestever] = cmaes('calcLapTimeCostDetail', lineopti.alpha_guess, sigma0, opts, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
 
 %%% Generate optimized line and plot result
 if isequal(splineType,'makima')

@@ -56,7 +56,7 @@ fprintf('\n--- Starting Phase 1: PSO (Global Search) ---\n');
 
 % PSO Hyperparameters (Fewer iterations needed since it's just a rough guess)
 n_particles = 40;     
-n_iterations = 100;   
+n_iterations = 200;   
 w = 0.7; cp = 1.5; cg = 1.5; 
 verbose = true;       
 
@@ -85,7 +85,7 @@ options = optimoptions('fmincon', ...
     'Algorithm', 'sqp', ...       % SQP is generally excellent for trajectory smoothing
     'Display', 'iter', ...
     'MaxFunctionEvaluations', 20000, ...
-    'MaxIterations', 200, ...
+    'MaxIterations', 50, ...
     'StepTolerance', 1e-6);
 
 % Run fmincon using the PSO output as the starting guess
