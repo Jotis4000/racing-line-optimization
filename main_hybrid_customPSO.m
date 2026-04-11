@@ -15,20 +15,20 @@ par = carParams();
 % n_var = 120 control points.
 % Because we are now using Adaptive Node Spacing, we can afford a higher 
 % point count without messing up the straights!
-n_var = 200;          
+n_var = 120;          
 % -------------------------------------------------------------------------
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
 % Generate Track
 track = genTrack(trackplot);
-
+% yo
 % Set up for optimizer
 lineopti.s_full = [0; cumsum(track.vecmag(1:end-1))];        % Cumulative distance
 
 %%% =======================================================
 %%% ADAPTIVE NODE SPACING
 %%% =======================================================
-corner_weight = 40;    % How strongly corners pull nodes (Multiplier)
+corner_weight = 20;    % How strongly corners pull nodes (Multiplier)
 smoothing_window = 50; % How wide the apex cluster is
 lineopti.s_ctrl = genAdaptiveNodes(lineopti.s_full, track.m, n_var, corner_weight, smoothing_window);
 
