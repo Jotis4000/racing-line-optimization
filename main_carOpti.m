@@ -11,10 +11,11 @@ addpath("functions\lineoptifuncs\")
 trackplot=false;
 
 par = carParams();
-n_var = 200;          % Number of Design Variables for Interpolation
+n_var = 80;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
-splineType = 'bspline'; % 'makima', 'bspline'
+guess = 'center'; % 'center', 'geom'
+splineType = 'makima'; % 'makima', 'bspline'
 
 % Generate Track
 track = genTrack(trackplot);
@@ -36,12 +37,40 @@ end
 lb = -lineopti.w_right_ctrl + car_margin-bmargin; 
 ub =  lineopti.w_left_ctrl  - car_margin+bmargin;
 
+%%% OPTIMIZATION ROUTINE
+
 % Initial guess (start exactly on the centerline, so alpha = 0)
 lineopti.alpha_guess = zeros(n_var, 1);
 
-% test = calcLapTimeCost(lineopti.alpha_guess, lineopti.s_ctrl, lineopti.s_full, track, par);
+if isequal(guess,'center')
+    lineopti.alpha_guess = zeros(n_var, 1);
+elseif isequal(guess,'geom')
+    options = optimoptions('fmincon', ...
+        'Algorithm', 'sqp', ...
+        'Display', 'iter', ...
+        'MaxFunctionEvaluations', 200000, ... 
+        'MaxIterations', 2000, ...           
+        'StepTolerance', 1e-8, ...
+        'OptimalityTolerance', 1e-8);
 
-%%% OPTIMIZATION ROUTINE
+    weight_length = 0.25;
+    objectiveFcn = @(alpha) calcCurvatureCost(alpha, lineopti.s_ctrl, lineopti.s_full, track, weight_length);
+
+    Aeq = zeros(2, n_var);
+    beq = zeros(2, 1); % The right side of the equations (both equal 0)
+    
+    Aeq(1, 1)   = 1;
+    Aeq(1, end) = -1;
+    
+    Aeq(2, 1)     = -1;
+    Aeq(2, 2)     =  1;
+    Aeq(2, end-1) =  1;
+    Aeq(2, end)   = -1;
+    
+    % x = fmincon(fun,x0,A,b,Aeq,beq,lb,ub,nonlcon,options)
+    lineopti.alpha_opt = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
+    lineopti.alpha_guess = lineopti.alpha_opt;
+end
 
 % Define fmincon options
 options = optimoptions('fmincon', ...
@@ -52,7 +81,6 @@ options = optimoptions('fmincon', ...
     'StepTolerance', 1e-6, ...
     'OptimalityTolerance', 1e-6);
 
-% objectiveFcn = @(alpha) calcLapTimeCost(alpha, lineopti.s_ctrl, lineopti.s_full, track, par);
 objectiveFcn = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
 
 % Equality constraints

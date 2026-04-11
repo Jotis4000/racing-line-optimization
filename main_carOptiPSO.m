@@ -51,7 +51,7 @@ end
 % Set up PSO options
 options_pso = optimoptions('particleswarm', ...
     'SwarmSize', 200, ...               % More particles = better global search
-    'MaxIterations', 200, ...           % Generations to run
+    'MaxIterations', 500, ...           % Generations to run
     'UseParallel', true, ...            % VITAL: Evaluates the swarm across all CPU cores
     'Display', 'iter');       % Let patternsearch finish the job at the end     'HybridFcn', @patternsearch
 
