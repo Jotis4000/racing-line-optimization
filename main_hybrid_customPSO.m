@@ -9,14 +9,13 @@ addpath("functions\lineoptifuncs\")
 
 % Run Params
 trackplot = false;
-
 par = carParams();
 
 % -------------------------------------------------------------------------
-% REDUCED n_var: 30 control points instead of 80. 
-% This is crucial. It forces the spline to draw longer, smoother arcs 
-% between points, physically preventing the optimizer from micro-stuttering.
-n_var = 120;          
+% n_var = 120 control points.
+% Because we are now using Adaptive Node Spacing, we can afford a higher 
+% point count without messing up the straights!
+n_var = 200;          
 % -------------------------------------------------------------------------
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
@@ -25,10 +24,18 @@ track = genTrack(trackplot);
 
 % Set up for optimizer
 lineopti.s_full = [0; cumsum(track.vecmag(1:end-1))];        % Cumulative distance
-lineopti.s_ctrl = linspace(0, lineopti.s_full(end), n_var)';
 
-lineopti.w_left_ctrl = interp1(lineopti.s_full, track.w(:,1), lineopti.s_ctrl);
-lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl);
+%%% =======================================================
+%%% ADAPTIVE NODE SPACING
+%%% =======================================================
+corner_weight = 40;    % How strongly corners pull nodes (Multiplier)
+smoothing_window = 50; % How wide the apex cluster is
+lineopti.s_ctrl = genAdaptiveNodes(lineopti.s_full, track.m, n_var, corner_weight, smoothing_window);
+
+% Interpolate bounds to the new adaptive control points using spline
+lineopti.w_left_ctrl = interp1(lineopti.s_full, track.w(:,1), lineopti.s_ctrl, 'spline');
+lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl, 'spline');
+%%% =======================================================
 
 % Lower and upper bounds (alpha is positive to the left)
 lb = -lineopti.w_right_ctrl + car_margin; 
@@ -54,16 +61,16 @@ Aeq(2, end)   = -1;
 %%% PHASE 1: GLOBAL SEARCH (The Scout - PSO)
 fprintf('\n--- Starting Phase 1: PSO (Global Search) ---\n');
 
-% PSO Hyperparameters (Fewer iterations needed since it's just a rough guess)
-n_particles = 40;     
-n_iterations = 100;   
+% PSO Hyperparameters
+n_particles = 200;     
+n_iterations = 500;   
 w = 0.7; cp = 1.5; cg = 1.5; 
 verbose = true;       
 
 % PSO Objective Function WITH Penalty
-% PSO needs a massive penalty to roughly understand the start/finish connection
 penalty_weight = 1e5;
-objectiveFcnPSO = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima') ...
+smooth_weight = 1.0; % Extra penalty for jagged lines during random PSO guessing
+objectiveFcnPSO = @(alpha) calcLapTimeCostDetailAdapt(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima', smooth_weight) ...
                            + penalty_weight * sum((Aeq * alpha - beq).^2);
 
 % Run Custom PSO
@@ -72,20 +79,19 @@ objectiveFcnPSO = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopt
 
 fprintf('\nPhase 1 Complete. Handing rough line to fmincon for smoothing...\n');
 
-
 %%% PHASE 2: LOCAL POLISH (The Polisher - fmincon)
 fprintf('\n--- Starting Phase 2: fmincon (Local Smoothing) ---\n');
 
 % fmincon Objective Function WITHOUT Penalty
 % fmincon natively handles the Aeq/beq equality constraints perfectly.
-objectiveFcnExact = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, 'bspline');
+objectiveFcnExact = @(alpha) calcLapTimeCostDetailAdapt(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima', 0.001);
 
 % fmincon Options
 options = optimoptions('fmincon', ...
-    'Algorithm', 'sqp', ...       % SQP is generally excellent for trajectory smoothing
+    'Algorithm', 'sqp', ...       
     'Display', 'iter', ...
     'MaxFunctionEvaluations', 20000, ...
-    'MaxIterations', 200, ...
+    'MaxIterations', 300, ...
     'StepTolerance', 1e-6);
 
 % Run fmincon using the PSO output as the starting guess
@@ -93,12 +99,11 @@ lineopti.alpha_opt = fmincon(objectiveFcnExact, alpha_pso_rough, [], [], Aeq, be
 
 fprintf('\n--- Hybrid Optimization Complete ---\n');
 
-
 %%% =======================================================
 %%% POST-PROCESSING & PLOTTING
 %%% =======================================================
 
-%%% Generate optimized line and plot result
+%%% Generate optimized line and plot result (Ensuring 'spline' is used here to match objective function)
 lineopti.alpha_opti_full = spline(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
 lineopti.optimized = track.m + track.vecleft ./ track.vecmag .* lineopti.alpha_opti_full;
 
@@ -126,8 +131,8 @@ fprintf("Track Midline Length [m]: %e\n", track.length)
 fprintf("Optimized Line Square Curvature: %e\n", lineopti.kappasquare)
 fprintf("Line Length [m]: %e\n", lineopti.length)
 
-% Calculate final lap time cost
-final_laptime = calcLapTimeCostDetail(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima');
+% Calculate final lap time cost (Using 'spline' to match)
+final_laptime = calcLapTimeCostDetailAdapt(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima', 0.0);
 fprintf("Estimated Lap Time Cost: %e\n", final_laptime)
 
 % Plot PSO Convergence just to see how the scout performed
