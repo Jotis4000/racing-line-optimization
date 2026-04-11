@@ -48,7 +48,7 @@ options = optimoptions('fmincon', ...
     'OptimalityTolerance', 1e-6);
 
 % objectiveFcn = @(alpha) calcLapTimeCost(alpha, lineopti.s_ctrl, lineopti.s_full, track, par);
-objectiveFcn = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
+objectiveFcn = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par);
 
 % Equality constraints
 % First and last point need to have the same position and direction
@@ -69,15 +69,18 @@ lineopti.alpha_opt = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, be
 
 %%% Generate optimized line and plot result
 
-if isequal(splineType,'makima')
+if splineType=='makima'
     lineopti.alpha_opti_full = makima(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
-elseif isequal(splineType,'bspline')
-    bdeg = 3;
-    bknots = augknt(lineopti.s_ctrl,bdeg+1);
-    b_spline_curve = spmak(bknots, lineopti.alpha_opt');
-    lineopti.alpha_opti_full = fnval(b_spline_curve, lineopti.s_full);
+else if splineType=='bspline'
+
 end
 
+bdeg = 3;
+bknots = augknt(lineopti.s_ctrl,bdeg+1);
+b_spline_curve = spmak(bknots, lineopti.alpha_opt');
+lineopti.alpha_opti_full = fnval(b_spline_curve, lineopti.s_full);
+
+% lineopti.alpha_opti_full = makima(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
 lineopti.optimized = track.m+track.vecleft./track.vecmag.*lineopti.alpha_opti_full;
 
 figure;

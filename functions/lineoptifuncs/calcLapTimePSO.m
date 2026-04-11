@@ -1,4 +1,4 @@
-function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, car)
+function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, par)
     
     % 1. Enforce Periodicity (Ghost Points)
     % L = sum(track.vecmag);
@@ -35,11 +35,11 @@ function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, car)
     % ds_race = sqrt(dx.^2 + dy.^2); 
     
     %steering lim
-    kappa_max = 1 / car.R_min;
+    kappa_max = 1 / par.R_min;
     steering_violation = max(max(abs(kappa)) - kappa_max, 0);
     % 4. Run the Fast V^2 Aero Physics Model
     % (Using the calcAeroSpeedProfileFast function we built previously)
-    actual_lap_time = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, car);
+    actual_lap_time = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par);
     
     % 5. Apply the Penalty
     if max_violation > 0

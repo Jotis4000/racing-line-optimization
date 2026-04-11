@@ -1,10 +1,25 @@
-function cost = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par)
+function cost = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par, splineType)
     
     addpath("functions\")
 
     N = length(s_full);
+
+    if isequal(splineType,'makima')
+        alpha_full = makima(s_ctrl, alpha_ctrl, s_full);
+    elseif isequal(splineType,'bspline')
+        bdeg = 3;
+        bknots = augknt(s_ctrl,bdeg+1);
+        b_spline_curve = spmak(bknots, alpha_ctrl');
+        alpha_full = fnval(b_spline_curve, s_full);
+    end
+
+    % bdeg = 3;
+    % bknots = augknt(s_ctrl,bdeg+1);
+    % b_spline_curve = spmak(bknots, alpha_ctrl');
+
     % Calculate line parameters the same as in the geometriic optimization
-    alpha_full = makima(s_ctrl, alpha_ctrl, s_full);
+    % alpha_full = makima(s_ctrl, alpha_ctrl, s_full);
+    % alpha_full = fnval(b_spline_curve, s_full);
     nx = track.vecleft(:,1) ./ track.vecmag;
     ny = track.vecleft(:,2) ./ track.vecmag;
     X_race = track.m(:,1) + alpha_full .* nx;
