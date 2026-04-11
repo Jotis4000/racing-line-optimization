@@ -35,7 +35,7 @@ lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl);
 
 if isequal(splineType,'makima')
     bmargin = 0;
-elseif isequal(splineType,'bspline')
+elseif isequal(splineType,'bspline')`
     bmargin = 10;
 end
 lb = -lineopti.w_right_ctrl + car_margin-bmargin; 
@@ -85,7 +85,7 @@ options = optimoptions('fmincon', ...
     'StepTolerance', 1e-6, ...
     'OptimalityTolerance', 1e-6); %, 'FiniteDifferenceType', 'central');
 
-objectiveFcn = @(alpha) calcLapTimeCostDetailFriction(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
+objectiveFcn = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
 
 % Equality constraints
 % First and last point need to have the same position and direction

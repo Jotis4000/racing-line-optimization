@@ -3,7 +3,7 @@ function track = genTrack(plt)
     %% Parameters
     addpath("tracks\")
 
-    FileName = "Montreal.csv";
+    FileName = "Budapest.csv";
     datat = xlsread(FileName); % x_m, y_m, w_right, w_left
 
     track.m = [datat(:,1) datat(:,2)]; % X, Y
