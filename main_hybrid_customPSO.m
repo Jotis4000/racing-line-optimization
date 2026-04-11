@@ -1,0 +1,139 @@
+%% MAIN
+clc;
+clear;
+close all;
+echo off; 
+
+addpath("functions\")
+addpath("functions\lineoptifuncs\")
+
+% Run Params
+trackplot = false;
+
+par = carParams();
+
+% -------------------------------------------------------------------------
+% REDUCED n_var: 30 control points instead of 80. 
+% This is crucial. It forces the spline to draw longer, smoother arcs 
+% between points, physically preventing the optimizer from micro-stuttering.
+n_var = 120;          
+% -------------------------------------------------------------------------
+car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
+
+% Generate Track
+track = genTrack(trackplot);
+
+% Set up for optimizer
+lineopti.s_full = [0; cumsum(track.vecmag(1:end-1))];        % Cumulative distance
+lineopti.s_ctrl = linspace(0, lineopti.s_full(end), n_var)';
+
+lineopti.w_left_ctrl = interp1(lineopti.s_full, track.w(:,1), lineopti.s_ctrl);
+lineopti.w_right_ctrl = interp1(lineopti.s_full, track.w(:,2), lineopti.s_ctrl);
+
+% Lower and upper bounds (alpha is positive to the left)
+lb = -lineopti.w_right_ctrl + car_margin; 
+ub =  lineopti.w_left_ctrl  - car_margin;
+
+% Equality constraints (Start and end points must match position and direction)
+% This ensures the track is a perfectly closed loop.
+Aeq = zeros(2, n_var);
+beq = zeros(2, 1); 
+
+Aeq(1, 1)   = 1;
+Aeq(1, end) = -1;
+
+Aeq(2, 1)     = -1;
+Aeq(2, 2)     =  1;
+Aeq(2, end-1) =  1;
+Aeq(2, end)   = -1;
+
+%%% =======================================================
+%%% THE HYBRID SOLVER: PSO + fmincon
+%%% =======================================================
+
+%%% PHASE 1: GLOBAL SEARCH (The Scout - PSO)
+fprintf('\n--- Starting Phase 1: PSO (Global Search) ---\n');
+
+% PSO Hyperparameters (Fewer iterations needed since it's just a rough guess)
+n_particles = 40;     
+n_iterations = 100;   
+w = 0.7; cp = 1.5; cg = 1.5; 
+verbose = true;       
+
+% PSO Objective Function WITH Penalty
+% PSO needs a massive penalty to roughly understand the start/finish connection
+penalty_weight = 1e5;
+objectiveFcnPSO = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima') ...
+                           + penalty_weight * sum((Aeq * alpha - beq).^2);
+
+% Run Custom PSO
+[alpha_pso_rough, best_cost_pso, gs_hist, eval_hist] = pso(...
+    objectiveFcnPSO, n_var, lb, ub, n_particles, n_iterations, w, cp, cg, verbose);
+
+fprintf('\nPhase 1 Complete. Handing rough line to fmincon for smoothing...\n');
+
+
+%%% PHASE 2: LOCAL POLISH (The Polisher - fmincon)
+fprintf('\n--- Starting Phase 2: fmincon (Local Smoothing) ---\n');
+
+% fmincon Objective Function WITHOUT Penalty
+% fmincon natively handles the Aeq/beq equality constraints perfectly.
+objectiveFcnExact = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, 'bspline');
+
+% fmincon Options
+options = optimoptions('fmincon', ...
+    'Algorithm', 'sqp', ...       % SQP is generally excellent for trajectory smoothing
+    'Display', 'iter', ...
+    'MaxFunctionEvaluations', 20000, ...
+    'MaxIterations', 200, ...
+    'StepTolerance', 1e-6);
+
+% Run fmincon using the PSO output as the starting guess
+lineopti.alpha_opt = fmincon(objectiveFcnExact, alpha_pso_rough, [], [], Aeq, beq, lb, ub, [], options);
+
+fprintf('\n--- Hybrid Optimization Complete ---\n');
+
+
+%%% =======================================================
+%%% POST-PROCESSING & PLOTTING
+%%% =======================================================
+
+%%% Generate optimized line and plot result
+lineopti.alpha_opti_full = spline(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
+lineopti.optimized = track.m + track.vecleft ./ track.vecmag .* lineopti.alpha_opti_full;
+
+figure('Name', 'Track Optimization Result');
+plot(track.m(:,1), track.m(:,2), '--k', ...
+     lineopti.optimized(:,1), lineopti.optimized(:,2), '-b', ...
+     track.l(:,1), track.l(:,2), '-r', ...
+     track.r(:,1), track.r(:,2), '-r', 'LineWidth', 1.5)
+legend("Centerline", "Optimized Line", "Track Bounds", "", "Location", "best")
+axis equal;
+title('Optimized Racing Line (Hybrid Solver)');
+
+%%% Calculate Line Parameters
+lineopti.dx = gradient(lineopti.optimized(:,1));
+lineopti.dy = gradient(lineopti.optimized(:,2));
+lineopti.ddx = gradient(lineopti.dx);
+lineopti.ddy = gradient(lineopti.dy);
+lineopti.kappasquare = sum(((lineopti.dx .* lineopti.ddy - lineopti.dy .* lineopti.ddx) ./ ((lineopti.dx.^2 + lineopti.dy.^2).^(3/2))).^2);
+lineopti.ds = sqrt(lineopti.dx.^2 + lineopti.dy.^2);
+lineopti.length = sum(lineopti.ds);
+
+fprintf("\n--- FINAL METRICS ---\n")
+fprintf("Track Midline Square Curvature: %e\n", track.kappasquare)
+fprintf("Track Midline Length [m]: %e\n", track.length)
+fprintf("Optimized Line Square Curvature: %e\n", lineopti.kappasquare)
+fprintf("Line Length [m]: %e\n", lineopti.length)
+
+% Calculate final lap time cost
+final_laptime = calcLapTimeCostDetail(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima');
+fprintf("Estimated Lap Time Cost: %e\n", final_laptime)
+
+% Plot PSO Convergence just to see how the scout performed
+figure('Name', 'PSO Convergence (Phase 1)');
+plot(1:n_iterations, eval_hist, 'LineWidth', 2);
+title('PSO Convergence History (Phase 1)');
+xlabel('Iteration');
+ylabel('Penalized Cost');
+grid on;
