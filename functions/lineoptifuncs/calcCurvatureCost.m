@@ -51,6 +51,6 @@ function cost = calcCurvatureCost(alpha_ctrl, s_ctrl, s_full, track, weight_leng
     cost_curvature = sum((kappa.^2) .* ds_race); 
     cost_length    = sum(ds_race);               % Total distance traveled
     
-    cost = 1000*(cost_curvature + (weight_length * cost_length)); % 1000 scaling to reduce function operations
+    cost = 10*(cost_curvature + (weight_length * cost_length)); % 1000 scaling to reduce function operations
     
 end

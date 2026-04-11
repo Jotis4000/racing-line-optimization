@@ -14,9 +14,9 @@ function par = carParams()
     par.CLA = 4.8;
     par.CDA = 1.2;
     par.rho = 1.225;
-    par.accelmax = 1.5; % g
-    par.decelmax = 5; % g
-    par.latmax = 5; % g
+    % par.accelmax = 1.5; % g
+    % par.decelmax = 5; % g
+    % par.latmax = 5; % g
 
     par.Vmax = (par.P_engine/(par.CDA*0.5*par.rho))^(1/3)
 

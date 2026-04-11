@@ -14,7 +14,7 @@ par = carParams();
 n_var = 300;          % Number of Design Variables for Interpolation
 car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
 
-guess = 'center'; % 'center', 'geom'
+guess = 'geom'; % 'center', 'geom'
 splineType = 'makima'; % 'makima', 'bspline'
 
 % Generate Track
@@ -52,12 +52,12 @@ elseif isequal(guess,'geom')
     options = optimoptions('fmincon', ...
         'Algorithm', 'sqp', ...
         'Display', 'iter', ...
-        'MaxFunctionEvaluations', 200000, ... 
-        'MaxIterations', 2000, ...           
-        'StepTolerance', 1e-8, ...
-        'OptimalityTolerance', 1e-8);
+        'MaxFunctionEvaluations', 2000000, ... 
+        'MaxIterations', 1000, ...           
+        'StepTolerance', 1e-6, ...
+        'OptimalityTolerance', 1e-6);
 
-    weight_length = 0.25;
+    weight_length = 0;
     objectiveFcn = @(alpha) calcCurvatureCost(alpha, lineopti.s_ctrl, lineopti.s_full, track, weight_length);
 
     Aeq = zeros(2, n_var);
@@ -77,6 +77,33 @@ elseif isequal(guess,'geom')
 end
 
 % Define fmincon options
+% options = optimoptions('fmincon', ...
+%     'Algorithm', 'sqp', ...
+%     'Display', 'iter', ...
+%     'MaxFunctionEvaluations', 20000000, ... 
+%     'MaxIterations', 300, ...           
+%     'StepTolerance', 1e-6, ...
+%     'OptimalityTolerance', 1e-6); %, 'FiniteDifferenceType', 'central');
+% 
+% objectiveFcn = @(alpha) calcLapTimeCostDetail(alpha, lineopti.s_ctrl, lineopti.s_full, track, par, splineType);
+% 
+% % Equality constraints
+% % First and last point need to have the same position and direction
+% Aeq = zeros(2, n_var);
+% beq = zeros(2, 1); % The right side of the equations (both equal 0)
+% 
+% Aeq(1, 1)   = 1;
+% Aeq(1, end) = -1;
+% 
+% Aeq(2, 1)     = -1;
+% Aeq(2, 2)     =  1;
+% Aeq(2, end-1) =  1;
+% Aeq(2, end)   = -1;
+% 
+% % x = fmincon(fun,x0,A,b,Aeq,beq,lb,ub,nonlcon,options)
+% lineopti.alpha_guess = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
+% % lineopti.alpha_opt = patternsearch(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
+
 options = optimoptions('fmincon', ...
     'Algorithm', 'sqp', ...
     'Display', 'iter', ...
@@ -102,7 +129,6 @@ Aeq(2, end)   = -1;
 
 % x = fmincon(fun,x0,A,b,Aeq,beq,lb,ub,nonlcon,options)
 lineopti.alpha_opt = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
-% lineopti.alpha_opt = patternsearch(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, beq, lb, ub, [], options);
 
 %%% Generate optimized line and plot result
 
