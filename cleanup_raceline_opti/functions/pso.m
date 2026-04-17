@@ -1,6 +1,7 @@
 function [global_solution, gs_eval, gs_history, gs_eval_history] = pso(cost_func, n_dimensions, lb, ub, n_particles, n_iterations, w, cp, cg, verbose)
     
-    % Ensure bounds are row vectors for matrix operations
+    % Ensure bounds are row vectors for matrix operations <- this hurt my
+    % soul the first time
     lb = lb(:)';
     ub = ub(:)';
     v_max = (ub - lb); % maximum velocity

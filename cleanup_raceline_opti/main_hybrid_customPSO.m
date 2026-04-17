@@ -9,7 +9,7 @@ addpath("functions\lineoptifuncs\")
 % Run params
 trackplot = false;
 par = carParams();
-splineType = 'makima'; % Keeping 'makima' based on your previous bound-overshoot fix
+splineType = 'makima';
 
 %setup parameters individually
 n_var_pso  = 50;   % for the pso we used a coarser grid, the get a bit more general solution
@@ -57,7 +57,7 @@ w = 0.7; cp = 1.5; cg = 1.5;
 verbose = true;       
 
 penalty_weight = 1e5;
-% Using your new friction cost function for the optimizer
+
 objectiveFcnPSO = @(alpha) calcLapTimeCostDetailFriction(alpha, lineopti.s_ctrl_pso, lineopti.s_full, track, par, splineType) ...
                            + penalty_weight * sum((Aeq_pso * alpha - beq).^2);
 

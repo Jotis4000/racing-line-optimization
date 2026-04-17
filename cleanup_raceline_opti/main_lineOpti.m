@@ -8,20 +8,12 @@ echo off; % Used to avoid unwanted warnings and other console stuff
 addpath("functions\")
 addpath("functions\lineoptifuncs\")
 
-%% MAIN
-clc;
-clear;
-close all;
-echo off; % Used to avoid unwanted warnings and other console stuff
-
-addpath("functions\")
-
 % Run Params
 trackplot=false;
 
 par = carParams();
 n_var = 200;          % Number of Design Variables for Interpolation
-car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
+car_margin = 0.5;    % (0.5m margin)
 
 % Generate Track
 track = genTrack(trackplot);
@@ -84,7 +76,6 @@ b_spline_curve = spmak(bknots, lineopti.alpha_opt');
 lineopti.alpha_opti_full = fnval(b_spline_curve, lineopti.s_full);
 lineopti.optimized = track.m + track.vecleft ./ track.vecmag .* lineopti.alpha_opti_full;
 
-% [Ensure your calcTimeAndVelocity runs BEFORE plotting so we can use vprof for colors]
 [laptime, vprof] = calcTimeAndVelocity(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par, 'bspline');
 
 %%% Calculate Acceleration Profile
@@ -227,12 +218,3 @@ fprintf("Lap Time [s]: %e\n", laptime)
 
 figure;
 plot(lineopti.s_full,vprof)
-% test2 = calcLapTimeCost(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par)
-% 
-% figure;
-% plot(test1)
-% hold on
-% plot(test2)
-% 
-% a = mean(test1)
-% b = mean(test2)

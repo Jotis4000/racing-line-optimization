@@ -13,8 +13,8 @@ splineType = 'makima'; % Keeping 'makima' based on your previous bound-overshoot
 
 % -------------------------------------------------------------------------
 % MULTI-GRID SETUP
-n_var_pso  = 50;   % Coarse Grid: Fast global search
-n_var_fmin = 250;  % Fine Grid: High-resolution local smoothing
+n_var_pso  = 120;   % Coarse Grid: Fast global search
+n_var_fmin = 350;  % Fine Grid: High-resolution local smoothing
 % -------------------------------------------------------------------------
 car_margin = 0.5;  
 
@@ -27,7 +27,7 @@ lineopti.s_full = [0; cumsum(track.vecmag(1:end-1))];
 %%% =======================================================
 %%% ADAPTIVE NODE SPACING (Creating TWO Grids)
 %%% =======================================================
-corner_weight = 40;    
+corner_weight = 20;    
 smoothing_window = 30; 
 
 % 1. Coarse Grid (For PSO)
@@ -64,8 +64,8 @@ beq = zeros(2, 1);
 
 %%% PHASE 1: GLOBAL SEARCH (COARSE GRID)
 fprintf('\n--- Starting Phase 1: PSO (Global Search on %d nodes) ---\n', n_var_pso);
-n_particles = 100;     
-n_iterations = 600;   
+n_particles = 200;     
+n_iterations = 1000;   
 w = 0.7; cp = 1.5; cg = 1.5; 
 verbose = true;       
 

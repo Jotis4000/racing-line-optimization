@@ -1,6 +1,6 @@
 function cost = calcLapTimeCostDetailFriction(alpha_ctrl, s_ctrl, s_full, track, par, splineType)
     
-    % addpath("functions\")
+    % addpath("functions\") this mfer <----
     N = length(s_full);
     if isequal(splineType,'makima')
         alpha_full = makima(s_ctrl, alpha_ctrl, s_full);
@@ -11,7 +11,7 @@ function cost = calcLapTimeCostDetailFriction(alpha_ctrl, s_ctrl, s_full, track,
         alpha_full = fnval(b_spline_curve, s_full);
     end
     
-    % Calculate line parameters the same as in the ggeometriic optimization
+    % Calculate line parameters the same as in the geometriic optimization
     nx = track.vecleft(:,1) ./ track.vecmag;
     ny = track.vecleft(:,2) ./ track.vecmag;
     X_race = track.m(:,1) + alpha_full .* nx;
@@ -57,7 +57,7 @@ function cost = calcLapTimeCostDetailFriction(alpha_ctrl, s_ctrl, s_full, track,
         F_normal_bridge = par.m * g + (Lconst * v2_next_bridge);
         F_grip_max_bridge = track.mu * F_normal_bridge;
         
-        % firction circle
+        % friction circle
         F_lat_bridge = par.m * abs(kappa(1)) * v2_next_bridge;
         F_lon_avail_bridge = sqrt(max(0, F_grip_max_bridge^2 - F_lat_bridge^2));
         F_brake_total_bridge = F_lon_avail_bridge + (Dconst * v2_next_bridge);
@@ -89,7 +89,7 @@ function cost = calcLapTimeCostDetailFriction(alpha_ctrl, s_ctrl, s_full, track,
         F_normal_bridge = par.m * 9.81 + F_downforce_bridge;
         F_grip_max_bridge = track.mu * F_normal_bridge;
         
-        % frcition circle
+        % friction circle
         F_lat_bridge = par.m * abs(kappa(N)) * v2_prev_bridge;
         F_lon_avail_bridge = sqrt(max(0, F_grip_max_bridge^2 - F_lat_bridge^2));
         

@@ -5,7 +5,7 @@ function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, par, spli
     % size(s_full)
     % alpha_ctrl = alpha_ctrl';
 
-    % 1. Interpolate to the full 900 points
+    % Interpolate to the full 900 points
     if isequal(splineType,'makima')
         alpha_full = makima(s_ctrl, alpha_ctrl, s_full);
     elseif isequal(splineType,'bspline')
@@ -16,7 +16,7 @@ function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, par, spli
         alpha_full = fnval(b_spline_curve, s_full);
     end
     
-    % 2. ENFORCE TRACK LIMITS (The Penalty Method)
+    % track limits
     car_margin = 0.5;
     c_left  = alpha_full - track.w(:,1) + car_margin;
     c_right = -alpha_full - track.w(:,2) + car_margin;
@@ -24,7 +24,7 @@ function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, par, spli
     % Find the maximum distance the car went out of bounds anywhere on track
     max_violation = max([c_left; c_right; 0]); 
     
-    %3. Calculate Geometry
+    % Calculate Geometry
     nx = track.vecleft(:,1) ./ track.vecmag;
     ny = track.vecleft(:,2) ./ track.vecmag;
     X_race = track.m(:,1) + alpha_full .* nx;
@@ -41,14 +41,11 @@ function cost_time = calcLapTimePSO(alpha_ctrl, s_ctrl, s_full, track, par, spli
     %steering lim
     kappa_max = 1 / par.R_min;
     steering_violation = max(max(abs(kappa)) - kappa_max, 0);
-    % 4. Run the Fast V^2 Aero Physics Model
-    % (Using the calcAeroSpeedProfileFast function we built previously)
+    % Run physics model
     actual_lap_time = calcLapTimeCostDetail(alpha_ctrl, s_ctrl, s_full, track, par, splineType);
     
-    % 5. Apply the Penalty
+    % Penalties
     if max_violation > 0
-        % If out of bounds, add 10 seconds of penalty per meter of violation
-        % This mathematically "walls off" the outside of the track
         cost_time = actual_lap_time + (20.0 * max_violation);
     else if alpha_full(1) ~= alpha_full(end)
         cost_time = actual_lap_time + (20.0 * max_violation);

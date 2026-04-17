@@ -12,7 +12,7 @@ trackplot=false;
 
 par = carParams();
 n_var = 150;          % Number of Design Variables for Interpolation
-car_margin = 0.5;    % Car half-width margin (e.g., 1 meter wide car = 0.5m margin)
+car_margin = 0.5;    % Car half-width margin (0.5m margin)
 
 splineType = 'bspline'; % 'makima', 'bspline'
 
@@ -50,12 +50,11 @@ end
 
 % Set up PSO options
 options_pso = optimoptions('particleswarm', ...
-    'SwarmSize', 200, ...               % More particles = better global search
-    'MaxIterations', 1000, ...           % Generations to run
-    'UseParallel', true, ...            % VITAL: Evaluates the swarm across all CPU cores
-    'Display', 'iter');       % Let patternsearch finish the job at the end     'HybridFcn', @patternsearch
+    'SwarmSize', 200, ...           
+    'MaxIterations', 1000, ...         
+    'UseParallel', true, ...         
+    'Display', 'iter');
 
-% Run the Swarm!
 % x = particleswarm(fun,nvars,lb,ub,options)
 lineopti.alpha_opt = particleswarm(objectiveFcnPSO, n_var, lb, ub, options_pso)';
 
