@@ -53,11 +53,11 @@ options = optimoptions('fmincon', ...
     'Algorithm', 'sqp', ...
     'Display', 'iter', ...
     'MaxFunctionEvaluations', 2000000, ... 
-    'MaxIterations', 1000, ...           
+    'MaxIterations', 500, ...           
     'StepTolerance', 1e-6, ...
     'OptimalityTolerance', 1e-6);
 
-weight_length = 0;
+weight_length = 0.001;
 objectiveFcn = @(alpha) calcCurvatureCost(alpha, lineopti.s_ctrl, lineopti.s_full, track, weight_length);
 
 % Equality constraints
@@ -78,6 +78,12 @@ lineopti.alpha_opt = fmincon(objectiveFcn, lineopti.alpha_guess, [], [], Aeq, be
 
 %%% Generate optimized line and plot result
 lineopti.alpha_opti_full = makima(lineopti.s_ctrl, lineopti.alpha_opt, lineopti.s_full);
+
+bdeg = 3;
+bknots = augknt(lineopti.s_ctrl,bdeg+1);
+b_spline_curve = spmak(bknots,lineopti.alpha_opt');
+lineopti.alpha_opti_full = fnval(b_spline_curve, lineopti.s_full);
+
 lineopti.optimized = track.m+track.vecleft./track.vecmag.*lineopti.alpha_opti_full;
 
 figure;
@@ -98,7 +104,7 @@ fprintf("Track Midline Length [m]: %e\n", track.length)
 fprintf("Optimized Line Square Curvature: %e\n", lineopti.kappasquare)
 fprintf("Line Length [m]: %e\n", lineopti.length)
 
-[laptime,vprof] = calcTimeAndVelocity(lineopti.alpha_guess, lineopti.s_ctrl, lineopti.s_full, track, par, 'makima');
+[laptime,vprof] = calcTimeAndVelocity(lineopti.alpha_opt, lineopti.s_ctrl, lineopti.s_full, track, par, 'bspline');
 fprintf("Lap Time [s]: %e\n", laptime)
 
 figure;

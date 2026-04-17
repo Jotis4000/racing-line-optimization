@@ -7,7 +7,7 @@ function par = carParams()
     par.m = 798; % kg
     par.P_engine = 735500; % W, 1000hp
     % par.F_engine = 5500; % N
-    par.F_engine_max = 15000;
+    par.F_engine_max = 10000;
     par.R_min = 5.0;
     
     % Second Order Params - Required for more advanced model
